@@ -4,13 +4,14 @@ import qs.Commons
 import "components"
 import "lib/Format.js" as Format
 
-// TIDAL now-playing for the Omarchy bar.
+// TIDAL for the Omarchy bar.
 //
-//   left click  = open the player       right click = open lyrics
-//   middle click = play / pause         scroll      = previous / next
+//   left / right click = drop the TIDAL window down (or tuck it away)
+//   middle click       = play / pause
+//   scroll             = previous / next
 //
-// State is read from the plugin's service (bound to Chromium over MPRIS), so
-// this never polls and never speaks to Chromium itself.
+// Now-playing is read from the plugin's service (bound to Chromium over MPRIS),
+// so this never polls and never talks to Chromium itself.
 BarWidget {
   id: root
   moduleName: "com.zondor.tidalweb"
@@ -25,30 +26,24 @@ BarWidget {
 
   readonly property real maxLabelWidth: setting("maxLabelWidth", 260)
   readonly property bool showLabel: setting("showLabel", true)
-  // Off by default: the widget is the way into the player, so it stays in the
-  // bar even when nothing is playing. On for anyone who only wants it while
-  // music is going.
+  // Off by default: the widget is the way into TIDAL, so it stays in the bar
+  // even when nothing is playing.
   readonly property bool hideWhenPaused: setting("hideWhenPaused", false)
 
   readonly property string label: Format.trackLabel(title, artist)
-
-  // The sleeve stands in for the mark only while it has one to show.
   readonly property bool showArt: !vertical && artUrl !== "" && showLabel && hasTrack
   readonly property bool showText: showLabel && !vertical && hasTrack && label !== ""
+  readonly property bool idleHidden: hideWhenPaused && !hasTrack
 
-  readonly property bool idleHidden: hideWhenPaused && !playing
-
-  // No own panel: the plugin's overlay is its panel surface, and the shell
-  // routes summons there. These keep the bar's hotkey plumbing happy.
+  // The plugin has no panel surface of its own — the drop-down is a real
+  // Chromium window. These keep the bar's hotkey plumbing happy.
   readonly property bool opened: false
-  function open() { if (svc) svc.openView("player") }
-  function close() {}
-  function toggle() { if (svc) svc.openView("player") }
+  function open() { if (svc) svc.showWeb() }
+  function close() { if (svc) svc.hideWeb() }
+  function toggle() { if (svc) svc.toggleWeb() }
 
   visible: !idleHidden
-  implicitWidth: idleHidden
-    ? 0
-    : (vertical ? barSize : content.implicitWidth + Style.space(14))
+  implicitWidth: idleHidden ? 0 : (vertical ? barSize : content.implicitWidth + Style.space(14))
   implicitHeight: vertical ? content.implicitHeight + Style.space(10) : barSize
 
   Row {
@@ -100,9 +95,8 @@ BarWidget {
 
     onClicked: function (mouse) {
       if (!root.svc) return
-      if (mouse.button === Qt.LeftButton) root.svc.openView("player")
-      else if (mouse.button === Qt.RightButton) root.svc.openView("lyrics")
-      else if (mouse.button === Qt.MiddleButton) root.svc.playPause()
+      if (mouse.button === Qt.MiddleButton) root.svc.playPause()
+      else root.svc.toggleWeb()
     }
 
     onWheel: function (wheel) {

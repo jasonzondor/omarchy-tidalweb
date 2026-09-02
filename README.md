@@ -2,36 +2,31 @@
 
 # TIDAL Web for Omarchy
 
-TIDAL in the Omarchy shell **without Mopidy** — or any other package that
-Omarchy does not already ship. Now-playing in the bar, a summonable player with
-lyrics and the play queue, media keys and the OSD, and a search box that
-deep-links into TIDAL. The audio comes from the TIDAL web player running in an
-isolated Chromium that lives on its own workspace, out of the way.
+TIDAL in the Omarchy bar **without Mopidy** — or anything else Omarchy doesn't
+already ship. Click the bar widget and the TIDAL web player drops down from its
+own workspace; the widget shows what's playing and the media keys work. That's
+it — TIDAL's own web UI does search, browse, lyrics and the queue.
 
-This is a deliberately smaller cousin of
-[`ph0bos/omarchy-tidal`](https://github.com/ph0bos/omarchy-tidal). That plugin
-is headless and hi-res; it needs Mopidy 4, `python-tidalapi` and a companion
-extension. This one needs none of that, and accepts the trade-offs below to get
-there.
+A deliberately lean take next to
+[`ph0bos/omarchy-tidal`](https://github.com/ph0bos/omarchy-tidal), which is
+headless and hi-res but needs Mopidy 4, `python-tidalapi` and a companion
+extension. This one is a thin wrapper around the TIDAL web player.
 
 ## Trade-offs — read these first
 
 | | |
 |---|---|
-| **Audio quality** | Up to **16-bit / 44.1 kHz lossless**. The browser's Widevine path cannot do hi-res / MQA. Same ceiling as `tidal-hifi`. |
-| **A browser window exists** | An isolated Chromium runs the TIDAL web app. It is parked on the `special:tidal` workspace and summoned on demand — you are not meant to look at it, but it is there. |
-| **Fragility** | Lyrics, the queue and "favorite" are read out of TIDAL's web DOM. TIDAL changes its frontend without notice; when something breaks the fix is usually one line in [`bin/omt-inject.js`](bin/omt-inject.js). Now-playing and transport go through MPRIS and are solid. |
-| **First run** | You sign in to TIDAL once, by hand, in the revealed browser window. |
+| **Audio quality** | Up to **16-bit / 44.1 kHz lossless**. The browser's Widevine path can't do hi-res / MQA — same ceiling as `tidal-hifi`. |
+| **It's a real window** | An isolated Chromium runs the TIDAL web app, parked on the `special:tidal` workspace. The widget **toggles** it in and out of view. **Closing it stops the music** — that window *is* the player. Tuck it away, don't close it. |
+| **First run** | Sign in to TIDAL once, by hand, in the window. |
 
 ## Requirements
 
 - **Omarchy 4+** with the Quickshell shell
-- A **Chromium-family browser** (`chromium`, Chrome, Brave, Edge, Vivaldi) with
-  Widevine — Omarchy's default `chromium` is fine
-- `python3` — present on every Omarchy install
+- A **Chromium-family browser** with Widevine — Omarchy's default `chromium` is fine
 - A **TIDAL subscription** (this is a client, not a source of music)
 
-Everything above except your TIDAL account is already on a stock Omarchy box.
+Nothing else — no `pip` packages, no Mopidy, no `playerctl`.
 
 ## Install
 
@@ -41,106 +36,78 @@ omarchy plugin enable com.zondor.tidalweb
 omarchy restart shell
 ```
 
-Then:
+Then, from `~/.config/omarchy/plugins/com.zondor.tidalweb/`:
 
 ```bash
-~/.config/omarchy/plugins/com.zondor.tidalweb/bin/omarchy-tidalweb-setup check
-~/.config/omarchy/plugins/com.zondor.tidalweb/bin/omarchy-tidalweb-setup desktop     # add to the launcher
-~/.config/omarchy/plugins/com.zondor.tidalweb/bin/omarchy-tidalweb-setup bindings    # print suggested keys
+bin/omarchy-tidalweb-setup check      # what's ready
+bin/omarchy-tidalweb-setup hypr       # print the recommended window rule (optional, tidier drop-down)
+bin/omarchy-tidalweb-setup bindings   # print a suggested keybinding
+bin/omarchy-tidalweb-setup desktop    # add "TIDAL Web" to the app launcher
 ```
 
-Add the keybindings it prints to `~/.config/hypr/bindings.lua` (SUPER+M is
-often taken; the suggestions use SUPER+ALT), then press one and sign in to
-TIDAL in the window that appears. Playback, lyrics and the queue then show up
-in the shell.
+Click the widget in the bar, sign in to TIDAL, play something.
 
 ## Using it
 
 | Action | How |
 |---|---|
-| Open the player | `omarchy-shell tidalweb overlay`, or left-click the bar widget |
-| Lyrics / Queue / Search | header buttons in the overlay, or `L` / `Q` / `/` while it is open |
-| Reveal the actual TIDAL window | `omarchy-shell tidalweb web`, or the ⧉ button |
-| Play / pause · next · previous | media keys, or middle-click / scroll the bar widget |
-| Favorite the current track | ♥ in the transport bar, or `omarchy-shell tidalweb favorite` |
-| Search | type in the overlay's Search view — it navigates the TIDAL window |
+| Show / hide the TIDAL window | left- or right-click the widget, or `omarchy-shell tidalweb toggle` |
+| Play / pause | media key, or middle-click the widget |
+| Next / previous | media keys, or scroll the widget |
+| Stop everything | `omarchy-shell tidalweb quit` (closes the window, ends playback) |
 
 `omarchy-shell tidalweb status` prints a JSON snapshot for debugging.
 
 ## Configuration
 
-The bar widget reads these from its `~/.config/omarchy/shell.json` layout entry
-(edit them there, or via the shell's widget settings UI):
+Bar-widget options live in the `~/.config/omarchy/shell.json` layout entry
+(edit there or via the shell's widget settings):
 
 ```jsonc
 {
   "id": "com.zondor.tidalweb",
-  "showLabel": true,        // show the track title next to the sleeve
-  "maxLabelWidth": 260,     // px before the title elides
-  "scrollLongLabels": true, // reserved for a future marquee
-  "hideWhenPaused": false   // take the widget out of the bar when not playing
+  "showLabel": true,       // show the track title next to the sleeve
+  "maxLabelWidth": 260,    // px before the title elides
+  "hideWhenPaused": false  // take the widget out of the bar when nothing is playing
 }
 ```
-
-## Removal
-
-```bash
-~/.config/omarchy/plugins/com.zondor.tidalweb/bin/omarchy-tidalweb-setup uninstall --purge
-omarchy plugin remove com.zondor.tidalweb
-omarchy restart shell
-```
-
-`--purge` also deletes the isolated Chromium profile and your TIDAL login.
 
 ## How it works
 
 ```
-special:tidal workspace          MPRIS (D-Bus, push)     ── title/artist/art
-  Chromium --app=listen.tidal.com ───────────────────────── position/seek
-    isolated profile + CDP port                             play/pause/next/prev
-        │
-        └── Chrome DevTools ── bin/omarchy-tidalweb-bridge (python3, stdlib)
-              WebSocket          injects bin/omt-inject.js
-                                 └── lyrics · queue · quality · favorite
-                        │
-              qml/Service.qml  (keepLoaded singleton, merges both sources)
-                        │
-          qml/BarWidget.qml    ·    qml/Overlay.qml
+special:tidal workspace                 MPRIS (D-Bus, push)
+  Chromium --app=listen.tidal.com  ───────────────────────────►  qml/Service.qml
+    isolated profile, no debug port      title / artist / art      (keepLoaded singleton)
+        ▲                                play / pause / next          │       │
+        │ toggle / show / hide                                        │       ▼
+  bin/omarchy-tidalweb  ◄──── Quickshell.execDetached ───────────────┘   qml/BarWidget.qml
+  (parks it on special:tidal, floats + sizes it)
 ```
 
-- `bin/omarchy-tidalweb` launches / shows / hides the Chromium instance and
-  parks it on `special:tidal` itself (no Hyprland rule needed).
-- `bin/omarchy-tidalweb-bridge` speaks the DevTools protocol over a minimal
-  stdlib WebSocket client — no `pip`, no `playerctl`, no extra binaries.
-- Nothing is stored except the Chromium profile at
-  `~/.local/share/omarchy-tidalweb/chromium` (your TIDAL login) and a port file
-  under `$XDG_RUNTIME_DIR`.
+- `bin/omarchy-tidalweb` launches the isolated Chromium and parks it on
+  `special:tidal`, floating and panel-sized. `toggle` / `show` / `hide` slide it
+  in and out via `togglespecialworkspace`.
+- `qml/Service.qml` reads now-playing and transport off MPRIS and drives that
+  script. No DevTools, no DOM scraping.
+- The only thing stored is the Chromium profile at
+  `~/.local/share/omarchy-tidalweb/chromium` (your TIDAL login).
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Nothing in the bar | `omarchy-tidalweb show`, sign in, play something. `omarchy-tidalweb-setup check`. |
-| Playback controls dead | Confirm Chromium exports MPRIS: `busctl --user list \| grep -i mpris`. |
-| No lyrics / empty queue | Open the browser and show TIDAL's own lyrics / queue panel once. If still empty, the DOM selectors have drifted — see below. |
-| DRM / playback error in the window | Your Chromium build lacks Widevine; install it (`chromium` on Arch may need the `chromium-widevine`-style component). |
-| CDP not answering | Chromium ≥ M136 ignores `--remote-debugging-port` unless `--user-data-dir` is non-default — the launcher sets one, so make sure no stray Chromium is holding the profile. |
-
-### When TIDAL changes its web player
-
-`bin/omt-inject.js` has a `SELECTORS` block at the top. Open the TIDAL web
-player, inspect the element that stopped working, and add its selector (prefer
-`data-test="…"`) to the front of the matching list. Reload with
-`omarchy-shell shell rescanPlugins` or restart Chromium.
+| Widget not in the bar | It's there unless `hideWhenPaused` is on and nothing's playing. `omarchy plugin list \| grep tidalweb`; `omarchy restart shell`. |
+| Window opens full-screen, not as a panel | Run `bin/omarchy-tidalweb-setup hypr` and add the printed `o.window` rule. |
+| DRM / playback error | Your Chromium lacks Widevine. On Arch, `chromium` normally has it; otherwise install the Widevine component. |
+| Media keys do nothing | `busctl --user list \| grep -i mpris` while a track plays — Chromium should be listed. |
+| Music stopped by itself | You closed the window instead of hiding it. Reopen with the widget and press play. |
 
 ## Security note
 
-While TIDAL is running, Chromium exposes a DevTools endpoint on
-`127.0.0.1:<port>` (default 9222+). It is loopback-only and drives an isolated
-profile, but any local process could talk to it. Stop it with
-`omarchy-tidalweb stop` when you are done, or `omarchy-shell tidalweb quit`.
+No DevTools / remote-debugging port is opened. The isolated Chromium profile
+keeps the TIDAL login separate from your normal browser. `omarchy-shell
+tidalweb quit` shuts the window down.
 
 ## License
 
-MIT. Portions adapted from `ph0bos/omarchy-tidal` (MIT). Not affiliated with or
-endorsed by TIDAL.
+MIT. Not affiliated with or endorsed by TIDAL.

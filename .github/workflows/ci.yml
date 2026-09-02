@@ -13,20 +13,12 @@ jobs:
       - name: manifest
         run: python3 scripts/validate-manifest.py .
 
-      - name: python
-        run: |
-          python3 -m py_compile bin/omarchy-tidalweb-bridge
-          pipx run ruff check bin/omarchy-tidalweb-bridge scripts/
-
       - name: shell
         run: bash -n bin/omarchy-tidalweb bin/omarchy-tidalweb-setup
-
-      - name: javascript
-        run: node --check bin/omt-inject.js
 
       - name: qml
         run: |
           sudo apt-get update && sudo apt-get install -y qt6-declarative-dev-tools
           # qmllint cannot resolve the Quickshell / qs.* modules off-machine;
           # --bare still catches syntax errors and typos.
-          qmllint --bare qml/*.qml qml/components/*.qml qml/views/*.qml || true
+          qmllint --bare qml/*.qml qml/components/*.qml || true

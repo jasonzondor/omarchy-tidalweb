@@ -2,31 +2,28 @@
   "schemaVersion": 1,
   "id": "com.zondor.tidalweb",
   "name": "TIDAL Web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Jason Zondor",
   "license": "MIT",
-  "description": "TIDAL in the Omarchy shell with no Mopidy. An isolated Chromium runs the TIDAL web player and does the streaming; a Quickshell surface gives you now-playing in the bar, a summonable player with synced lyrics and the play queue, and a search box that deep-links into the web app. Requires only software Omarchy ships by default.",
+  "description": "TIDAL in the Omarchy bar with no Mopidy. Clicking the widget drops down the TIDAL web player in an isolated Chromium, parked on its own workspace so it is never in your way; the widget shows what is playing and drives transport over MPRIS. Requires only software Omarchy ships by default.",
   "kinds": [
     "service",
-    "bar-widget",
-    "overlay"
+    "bar-widget"
   ],
   "keepLoaded": true,
   "entryPoints": {
     "service": "qml/Service.qml",
-    "barWidget": "qml/BarWidget.qml",
-    "overlay": "qml/Overlay.qml"
+    "barWidget": "qml/BarWidget.qml"
   },
   "barWidget": {
     "displayName": "TIDAL Web",
-    "description": "TIDAL now-playing with transport controls",
+    "description": "TIDAL now-playing; click to drop down the player",
     "category": "Media",
     "allowMultiple": false,
     "defaultSection": "center",
     "defaults": {
       "showLabel": true,
       "maxLabelWidth": 260,
-      "scrollLongLabels": true,
       "hideWhenPaused": false
     },
     "schema": [
@@ -41,14 +38,9 @@
         "label": "Max label width (px)"
       },
       {
-        "key": "scrollLongLabels",
-        "type": "bool",
-        "label": "Scroll long titles"
-      },
-      {
         "key": "hideWhenPaused",
         "type": "bool",
-        "label": "Hide when paused"
+        "label": "Hide the widget when nothing is playing"
       }
     ]
   },

@@ -34,6 +34,19 @@ now-playing in the bar and toggles that window in and out of view.
 - **Child processes** go through `bash -c` (`["bash","-c","exec \"$0\" \"$1\"",
   script, arg]`) — Quickshell's `Process` / `execDetached` won't reliably start
   a script by path directly, especially through a symlinked dir.
+- **Hyprland is Lua here** (Omarchy, Hyprland ≥ 0.56). `hyprctl dispatch` takes
+  Lua, not `dispatcher args` strings: `hyprctl dispatch
+  'hl.dsp.window.move({ window = "address:0x..", workspace = "special:tidal",
+  follow = false })'`. Ops by `window = "address:.."` don't steal focus.
+  `hl.dsp.workspace.toggle_special("tidal")` shows/hides the special ws.
+  `hyprctl clients -j` / `monitors -j` queries still work normally.
+- **Chromium ignores `--class` in `--app` mode on Wayland** — the window comes
+  up as `chrome-listen.tidal.com__-Default` (derived from the `--app` URL, fixed
+  for the window's life). Match by pid first, that class regex as fallback.
+- **The launcher takes an flock** (`$XDG_RUNTIME_DIR/omarchy-tidalweb/lock`) and
+  holds it until the spawned Chromium is pgrep-visible, so a click storm can't
+  spawn a pile of windows. Chromium is spawned with `9>&-` so it doesn't
+  inherit and pin that lock.
 - **MPRIS matching**: `Service.player` prefers the player whose
   `metadata["xesam:url"]` contains `tidal`, so it never latches onto another
   Chromium window. Falls back to "a Chromium player with a track" only if no

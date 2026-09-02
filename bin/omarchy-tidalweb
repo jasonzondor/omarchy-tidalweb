@@ -4,21 +4,34 @@
 #
 # The audio engine for the com.zondor.tidalweb plugin: an ordinary Chromium
 # running the TIDAL web player in its own profile. It lives on the special:tidal
-# workspace and drops down when you click the bar widget. There is no DevTools
-# port and nothing headless — closing this window stops the music, so the widget
-# toggles it rather than closing it.
+# workspace and drops down when you click the bar widget. No DevTools port,
+# nothing headless. Closing the window stops the music, so the widget toggles it
+# rather than closing it.
+#
+# No `set -e`: this script is mostly best-effort hyprctl calls, and a failed one
+# must never leave things half-done or make a click look like it did nothing.
 
-set -euo pipefail
+set -uo pipefail
 
 URL="https://listen.tidal.com"
-WINDOW_CLASS="com.zondor.tidalweb"
+# Chromium in --app mode ignores --class on Wayland and derives the app_id from
+# the URL, so this is what the window actually comes up as. Matching is done by
+# pid where possible and this as a fallback.
+WINDOW_CLASS_RE="^chrome-listen\\.tidal\\.com"
 SPECIAL_WS="tidal"
 PANEL_W=980
 PANEL_H=700
 
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/omarchy-tidalweb"
 PROFILE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/omarchy-tidalweb/chromium"
+LOCK_FILE="$RUNTIME_DIR/lock"
 mkdir -p "$RUNTIME_DIR" "$(dirname "$PROFILE_DIR")"
+
+# Serialise every invocation. Rapid double-clicks on the widget must not each
+# spawn a Chromium before the first is visible to pgrep — that was how a stray
+# click storm turned into a pile of windows.
+exec 9>"$LOCK_FILE"
+flock -w 10 9 || { echo "omarchy-tidalweb: busy" >&2; exit 0; }
 
 resolve_chromium() {
   local desktop exec_bin
@@ -41,67 +54,105 @@ resolve_chromium() {
   return 1
 }
 
-is_running() { pgrep -f -- "--user-data-dir=$PROFILE_DIR" >/dev/null 2>&1; }
+# The single browser process for our profile (skip --type= helper children,
+# whose cmdline contains a --type= argument).
+main_pid() {
+  local p
+  for p in $(pgrep -f -- "--user-data-dir=$PROFILE_DIR" 2>/dev/null); do
+    if ! grep -qz -- '--type=' "/proc/$p/cmdline" 2>/dev/null; then
+      echo "$p"
+      return 0
+    fi
+  done
+}
+
+is_running() { [[ -n "$(main_pid)" ]]; }
 
 window_address() {
-  hyprctl clients -j 2>/dev/null |
-    jq -r --arg c "$WINDOW_CLASS" '.[] | select(.class == $c) | .address' | head -1
+  local pid; pid="$(main_pid)"
+  hyprctl clients -j 2>/dev/null | jq -r \
+    --arg p "${pid:-0}" --arg re "$WINDOW_CLASS_RE" \
+    '.[] | select((.pid|tostring) == $p or (.class | test($re))) | .address' | head -1
 }
+
+# Omarchy runs Hyprland with a Lua config, so `hyprctl dispatch` takes Lua
+# (hl.dsp.*), not the classic "dispatcher args" strings.
+dsp() { hyprctl dispatch "$1" >/dev/null 2>&1 || true; }
 
 special_active() {
   hyprctl monitors -j 2>/dev/null |
     jq -e --arg w "special:$SPECIAL_WS" 'any(.[]; .specialWorkspace.name == $w)' >/dev/null 2>&1
 }
 
-# Park the window on special:tidal, floating and sized like a panel. Best effort:
-# an `o.window` rule (see `omarchy-tidalweb-setup hypr`) does this more cleanly,
-# but the plugin should still work without one.
+window_on_special() {
+  local addr; addr="$(window_address)"
+  [[ -n "$addr" ]] || return 1
+  hyprctl clients -j 2>/dev/null |
+    jq -e --arg a "$addr" --arg w "special:$SPECIAL_WS" \
+      'any(.[]; .address == $a and .workspace.name == $w)' >/dev/null 2>&1
+}
+
+# Park the window on special:tidal, floating and panel-sized — by address, so
+# it never steals focus. An `o.window` rule (see `omarchy-tidalweb-setup hypr`)
+# does the same declaratively for people who want it to survive manual moves.
 stow_window() {
   local addr i
-  for i in $(seq 1 60); do
-    addr="$(window_address)"; [[ -n "$addr" ]] && break
+  for i in $(seq 1 50); do
+    addr="$(window_address)"
+    [[ -n "$addr" ]] && break
     sleep 0.1
   done
-  [[ -z "$addr" ]] && return 1
+  [[ -z "$addr" ]] && return 0
+  window_on_special && return 0
 
-  local mon_w scale x
-  read -r mon_w scale < <(hyprctl monitors -j 2>/dev/null |
-    jq -r 'map(select(.focused))[0] // .[0] | "\(.width) \(.scale)"')
-  x=$(awk -v w="${mon_w:-1920}" -v s="${scale:-1}" -v p="$PANEL_W" 'BEGIN{printf "%d", (w/s - p)/2}')
-
-  hyprctl --batch "\
-dispatch movetoworkspacesilent special:$SPECIAL_WS,address:$addr ; \
-dispatch setfloating address:$addr ; \
-dispatch resizewindowpixel exact $PANEL_W $PANEL_H,address:$addr ; \
-dispatch movewindowpixel exact ${x:-200} 56,address:$addr" >/dev/null 2>&1 || true
+  local w="address:$addr"
+  dsp "hl.dsp.window.float({ window = \"$w\", action = \"on\" })"
+  dsp "hl.dsp.window.resize({ window = \"$w\", x = $PANEL_W, y = $PANEL_H, exact = true })"
+  dsp "hl.dsp.window.move({ window = \"$w\", workspace = \"special:$SPECIAL_WS\", follow = false })"
+  dsp "hl.dsp.window.center({ window = \"$w\" })"
 }
 
 launch() {
-  is_running && { stow_window; return 0; }
+  if is_running; then
+    stow_window
+    return 0
+  fi
   local chromium
   if ! chromium="$(resolve_chromium)"; then
     command -v omarchy-notification-send >/dev/null 2>&1 &&
       omarchy-notification-send "TIDAL Web needs a Chromium-family browser installed"
     echo "omarchy-tidalweb: no Chromium-family browser found" >&2
-    exit 1
+    return 1
   fi
+
+  # 9>&- so Chromium does not inherit (and hold for its whole lifetime) the
+  # flock fd.
   setsid -f "$chromium" \
     --app="$URL" \
     --user-data-dir="$PROFILE_DIR" \
-    --class="$WINDOW_CLASS" \
     --no-first-run \
     --no-default-browser-check \
-    >/dev/null 2>&1
+    >/dev/null 2>&1 9>&-
+
+  # Hold the lock until the process is actually up, so the next invocation
+  # sees it and never spawns a second one.
+  local i
+  for i in $(seq 1 50); do
+    is_running && break
+    sleep 0.1
+  done
   stow_window
 }
 
 show() {
-  launch
-  special_active || hyprctl dispatch togglespecialworkspace "$SPECIAL_WS" >/dev/null 2>&1 || true
+  launch || return 1
+  special_active || dsp "hl.dsp.workspace.toggle_special(\"$SPECIAL_WS\")"
+  return 0
 }
 
 hide() {
-  special_active && hyprctl dispatch togglespecialworkspace "$SPECIAL_WS" >/dev/null 2>&1 || true
+  special_active && dsp "hl.dsp.workspace.toggle_special(\"$SPECIAL_WS\")"
+  return 0
 }
 
 toggle() {
@@ -109,7 +160,14 @@ toggle() {
 }
 
 stop() {
-  pkill -f -- "--user-data-dir=$PROFILE_DIR" 2>/dev/null || true
+  local p; p="$(main_pid)"
+  if [[ -n "$p" ]]; then
+    kill "$p" 2>/dev/null
+    sleep 0.5
+  fi
+  # Anything left (renderers that outlived the browser, a wedged instance).
+  pkill -f -- "--user-data-dir=$PROFILE_DIR" 2>/dev/null
+  return 0
 }
 
 status() {

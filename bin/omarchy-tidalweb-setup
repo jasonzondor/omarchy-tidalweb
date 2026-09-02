@@ -59,11 +59,10 @@ cmd_check() {
     ylw "plugin dir: $PLUGIN_DIR — install with 'omarchy plugin add <git-url>'"
   fi
 
-  if hyprctl -j getoption 2>/dev/null >/dev/null; then :; fi
-  if grep -rqs 'com\.zondor\.tidalweb' "$HOME/.config/hypr/" 2>/dev/null; then
+  if grep -rqs 'chrome-listen\\\?\.tidal\.com' "$HOME/.config/hypr/" 2>/dev/null; then
     grn "Hyprland window rule in place"
   else
-    ylw "no Hyprland window rule — run '$0 hypr' for a tidier drop-down (optional)"
+    ylw "no Hyprland window rule — optional; the launcher floats + parks the window itself"
   fi
 
   local status; status="$("$HERE/omarchy-tidalweb" status 2>/dev/null || echo '{}')"
@@ -78,18 +77,19 @@ cmd_check() {
 
 cmd_hypr() {
   cat <<'EOF'
-Optional but recommended — makes the drop-down a tidy floating panel instead of
-a full-screen window. Add to ~/.config/hypr/hyprland.lua, below the line
-"Add any other personal Hyprland configuration below":
+Optional. The launcher already floats and parks the window on special:tidal by
+itself. This rule makes that stick even if you move the window by hand. Add to
+~/.config/hypr/hyprland.lua, below "Add any other personal Hyprland
+configuration below":
 
-  o.window("com.zondor.tidalweb", {
+  o.window("^chrome-listen\\.tidal\\.com", {
     float = true,
     size = "980 700",
     center = true,
-    workspace = "special:tidal",
+    workspace = "special:tidal silent",
   })
 
-Then apply and check:  hyprctl reload && hyprctl configerrors
+Then:  hyprctl reload && hyprctl configerrors
 EOF
 }
 

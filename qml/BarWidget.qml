@@ -64,8 +64,15 @@ BarWidget {
       bar.releasePopout(root)
   }
 
+  readonly property color fg: bar ? bar.barForeground : Color.bar.text
+  readonly property string barFont: bar ? bar.fontFamily : Style.font.family
+
   visible: !idleHidden
-  implicitWidth: idleHidden ? 0 : (vertical ? barSize : content.implicitWidth + Style.space(14))
+  // Never collapse to nothing: even with no track the widget is a clickable
+  // entry point and must stay findable in the bar.
+  implicitWidth: idleHidden
+    ? 0
+    : (vertical ? barSize : Math.max(Math.round(barSize * 0.9), content.implicitWidth + Style.space(14)))
   implicitHeight: vertical ? content.implicitHeight + Style.space(10) : barSize
 
   Row {
@@ -87,12 +94,10 @@ BarWidget {
       anchors.verticalCenter: parent.verticalCenter
       visible: !root.showArt
       textFormat: Text.PlainText
-      text: ""
-      color: root.playing
-        ? (root.bar ? root.bar.barForeground : Color.bar.text)
-        : Qt.darker(root.bar ? root.bar.barForeground : Color.bar.text, 1.6)
-      font.family: root.bar ? root.bar.fontFamily : Style.font.family
-      font.pixelSize: Style.font.body * 1.1
+      text: "󰝚"
+      color: root.playing ? root.fg : Qt.rgba(root.fg.r, root.fg.g, root.fg.b, 0.75)
+      font.family: root.barFont
+      font.pixelSize: Style.font.icon
     }
 
     Text {
@@ -103,8 +108,8 @@ BarWidget {
       textFormat: Text.PlainText
       text: root.label
       elide: Text.ElideRight
-      color: root.bar ? root.bar.barForeground : Color.bar.text
-      font.family: root.bar ? root.bar.fontFamily : Style.font.family
+      color: root.fg
+      font.family: root.barFont
       font.pixelSize: Style.font.body
     }
   }

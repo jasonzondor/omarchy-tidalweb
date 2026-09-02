@@ -1,0 +1,144 @@
+#!/bin/bash
+# omarchy:summary=Set up / diagnose the quickshell.tidalweb plugin
+# omarchy:args=[check|desktop|hypr|bindings|uninstall] [--purge]
+#
+#   check      report what is and is not ready
+#   desktop    add "TIDAL Web" to the app launcher
+#   hypr       print the optional Hyprland window rule
+#   bindings   print suggested ~/.config/hypr/bindings.lua lines
+#   uninstall  remove the desktop entry (and, with --purge, the Chromium profile)
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_DIR="$(dirname "$HERE")"
+
+DESKTOP_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/applications/omarchy-tidalweb.desktop"
+ICON_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/omarchy-tidalweb.svg"
+PROFILE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/omarchy-tidalweb"
+
+PURGE=0
+for a in "$@"; do [[ "$a" == "--purge" ]] && PURGE=1; done
+
+red() { printf '\033[31m✗\033[0m %s\n' "$*"; }
+grn() { printf '\033[32m✓\033[0m %s\n' "$*"; }
+ylw() { printf '\033[33m!\033[0m %s\n' "$*"; }
+
+chromium_family() {
+  local d
+  d="$(xdg-settings get default-web-browser 2>/dev/null || true)"
+  case "$d" in
+    chromium.desktop | google-chrome.desktop | brave-browser.desktop | \
+      brave-origin.desktop | microsoft-edge.desktop | vivaldi-stable.desktop | helium.desktop)
+      return 0 ;;
+  esac
+  return 1
+}
+
+cmd_check() {
+  if chromium_family; then
+    grn "default browser is Chromium-family ($(xdg-settings get default-web-browser))"
+  elif command -v chromium >/dev/null 2>&1; then
+    ylw "default browser is not Chromium-family; the plugin will use 'chromium' directly"
+  else
+    red "no Chromium-family browser found — install one (e.g. 'omarchy pkg add chromium')"
+  fi
+
+  if command -v /usr/bin/python3 >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1; then
+    grn "python3 present ($(python3 -V 2>&1))"
+  else
+    red "python3 missing — the DevTools bridge needs it"
+  fi
+
+  for tool in jq curl hyprctl; do
+    command -v "$tool" >/dev/null 2>&1 && grn "$tool present" || red "$tool missing"
+  done
+
+  if [[ -d "$HOME/.config/omarchy/plugins/quickshell.tidalweb" ]] ||
+     [[ "$PLUGIN_DIR" == "$HOME/.config/omarchy/plugins/"* ]]; then
+    grn "plugin is under ~/.config/omarchy/plugins"
+  else
+    ylw "plugin dir: $PLUGIN_DIR — install with 'omarchy plugin add <git-url>' or symlink it"
+  fi
+
+  local status
+  status="$("$HERE/omarchy-tidalweb" status 2>/dev/null || echo '{}')"
+  if command -v jq >/dev/null 2>&1; then
+    if [[ "$(jq -r '.running // false' <<<"$status")" == "true" ]]; then
+      grn "TIDAL Chromium is running (CDP port $(jq -r '.port' <<<"$status"))"
+      [[ "$(jq -r '.cdp // false' <<<"$status")" == "true" ]] &&
+        grn "DevTools endpoint answering" ||
+        ylw "DevTools endpoint not answering yet"
+    else
+      ylw "TIDAL Chromium not running — start it with 'omarchy-tidalweb show' and sign in"
+    fi
+  fi
+
+  printf '\nNext: run "%s bindings" and "%s desktop".\n' "$0" "$0"
+}
+
+cmd_desktop() {
+  mkdir -p "$(dirname "$DESKTOP_FILE")" "$(dirname "$ICON_FILE")"
+  [[ -f "$PLUGIN_DIR/assets/icon.svg" ]] && cp "$PLUGIN_DIR/assets/icon.svg" "$ICON_FILE"
+  cat >"$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=TIDAL Web
+Comment=TIDAL for the Omarchy shell
+Exec=$PLUGIN_DIR/bin/omarchy-tidalweb show
+Icon=omarchy-tidalweb
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+StartupWMClass=omarchy-tidalweb
+EOF
+  command -v update-desktop-database >/dev/null 2>&1 &&
+    update-desktop-database "$(dirname "$DESKTOP_FILE")" >/dev/null 2>&1 || true
+  grn "installed $DESKTOP_FILE"
+}
+
+cmd_hypr() {
+  cat <<'EOF'
+The plugin parks the TIDAL window on the special:tidal workspace by itself, so
+no Hyprland rule is required. For a floating, sized window add this to
+~/.config/hypr/hyprland.lua (below "Add any other personal Hyprland config"):
+
+  o.window("omarchy-tidalweb", { float = true, size = "1100 780", center = true })
+
+Then: hyprctl reload && hyprctl configerrors
+EOF
+}
+
+cmd_bindings() {
+  cat <<'EOF'
+Omarchy does not bind a plugin's surfaces. Add to ~/.config/hypr/bindings.lua
+(SUPER+M is taken on this machine — these use SUPER+ALT):
+
+  o.bind("SUPER + ALT + T", "TIDAL",         "omarchy-shell tidalweb overlay")
+  o.bind("SUPER + ALT + L", "TIDAL lyrics",  "omarchy-shell tidalweb lyrics")
+  o.bind("SUPER + ALT + B", "TIDAL browser", "omarchy-shell tidalweb web")
+
+Check for conflicts first with:  omarchy menu keybindings --print
+EOF
+}
+
+cmd_uninstall() {
+  rm -f "$DESKTOP_FILE" "$ICON_FILE" && grn "removed desktop entry"
+  "$HERE/omarchy-tidalweb" stop 2>/dev/null || true
+  if [[ "$PURGE" -eq 1 ]]; then
+    rm -rf "$PROFILE_DIR" && grn "removed Chromium profile + TIDAL login ($PROFILE_DIR)"
+  else
+    ylw "kept the Chromium profile; pass --purge to delete it and the TIDAL login"
+  fi
+}
+
+case "${1:-check}" in
+  check) cmd_check ;;
+  desktop) cmd_desktop ;;
+  hypr) cmd_hypr ;;
+  bindings) cmd_bindings ;;
+  uninstall) cmd_uninstall ;;
+  *)
+    echo "usage: omarchy-tidalweb-setup [check|desktop|hypr|bindings|uninstall] [--purge]" >&2
+    exit 2
+    ;;
+esac

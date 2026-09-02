@@ -102,14 +102,35 @@ Item {
   // Our window's Hyprland address (bare hex, no 0x), written by the launcher.
   property string panelAddr: ""
 
+  // Monitor-local geometry of the panel window, written by the launcher. The
+  // dismiss scrim punches a hole here so clicks on the panel reach Chromium.
+  property rect panelRect: Qt.rect(0, 0, 0, 0)
+  property int barHeight: 0
+
+  readonly property string runtimeDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omarchy-tidalweb"
 
   FileView {
     id: addrFile
-    path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omarchy-tidalweb/window-address"
+    path: root.runtimeDir + "/window-address"
     watchChanges: true
     printErrors: false
     onLoaded: root.panelAddr = String(text() || "").trim().replace(/^0x/i, "").toLowerCase()
     onLoadFailed: root.panelAddr = ""
+  }
+
+  FileView {
+    id: geomFile
+    path: root.runtimeDir + "/window-geometry"
+    watchChanges: true
+    printErrors: false
+    onLoaded: {
+      var f = String(text() || "").trim().split(/\s+/).map(Number)
+      if (f.length >= 4 && f.slice(0, 4).every(function(n) { return isFinite(n) })) {
+        root.panelRect = Qt.rect(f[0], f[1], f[2], f[3])
+        if (f.length >= 5 && isFinite(f[4])) root.barHeight = f[4]
+      }
+    }
+    onLoadFailed: { root.panelRect = Qt.rect(0, 0, 0, 0); root.barHeight = 0 }
   }
 
   // Hyprland only tells us when the special workspace *changes*; seed the state
@@ -133,18 +154,13 @@ Item {
       var name = String(event.name || "")
       var parts = String(event.data || "").split(",")
 
+      // Click-away dismissal is the scrim's job (Scrim.qml) — a focus event
+      // would also fire on hover with focus-follows-mouse. Here we only track
+      // whether the panel is showing.
       if (name === "activespecial") {
         root.panelVisible = String(parts[0] || "") === root.specialWs
       } else if (name === "activespecialv2") {
         root.panelVisible = String(parts[1] || "") === root.specialWs
-      } else if (name === "activewindowv2") {
-        // Focus moved to another window — tuck the panel away, the way the
-        // calendar closes when you click elsewhere. Safe during our own open:
-        // Hyprland emits activewindowv2 (for our window) *before* activespecial,
-        // so panelVisible is still false then and this is skipped.
-        if (!root.panelVisible) return
-        var addr = String(event.data || "").trim().replace(/^0x/i, "").toLowerCase()
-        if (addr !== "" && addr !== root.panelAddr) root.hideWeb()
       }
     }
   }

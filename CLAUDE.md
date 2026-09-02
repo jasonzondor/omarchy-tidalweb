@@ -47,14 +47,15 @@ now-playing in the bar and toggles that window in and out of view.
   holds it until the spawned Chromium is pgrep-visible, so a click storm can't
   spawn a pile of windows. Chromium is spawned with `9>&-` so it doesn't
   inherit and pin that lock.
-- **Panel state / click-away**: the launcher writes the window address to
-  `$XDG_RUNTIME_DIR/omarchy-tidalweb/window-address`; `Service.qml` watches it
-  and listens to `Hyprland.rawEvent` — `activespecial`(`v2`) sets
-  `panelVisible`, and `activewindowv2` with an address that isn't ours hides
-  the panel (guarded by `clickAwayGuardUntil` for ~2.5s after we open it).
-  `BarWidget` mirrors `panelVisible` into `bar.requestPopout(root)` /
-  `releasePopout(root)` so the bar draws its accent under-line and closing
-  another bar popup closes this one.
+- **Panel state**: `Service.qml` sets `panelVisible` from `Hyprland.rawEvent`
+  `activespecial`(`v2`). `BarWidget` mirrors it into `bar.requestPopout(root)` /
+  `releasePopout(root)` for the accent under-line + one-popup-at-a-time.
+- **Click-away** is `qml/Scrim.qml` (an `overlay` kind, keepLoaded): a
+  transparent full-screen layer-shell `PanelWindow` on `WlrLayer.Overlay` whose
+  input `mask` is the screen minus the panel rect minus the bar strip. A press
+  anywhere in that region calls `hideWeb`. Focus events are *not* used for
+  click-away — they fire on hover with focus-follows-mouse. The launcher writes
+  `window-geometry` (`x y w h barHeight`, monitor-local) for the mask.
 - **`hyprctl dispatch` is Lua here.** `activespecial`/`activewindowv2` etc.
   are still emitted on `.socket2.sock` in the classic `name>>a,b,c` form.
 - **MPRIS matching**: `Service.player` prefers the player whose

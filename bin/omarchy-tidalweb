@@ -26,7 +26,8 @@ TOP_GAP=8     # px below the bar, so it reads as a drop-down from the top
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/omarchy-tidalweb"
 PROFILE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/omarchy-tidalweb/chromium"
 LOCK_FILE="$RUNTIME_DIR/lock"
-ADDR_FILE="$RUNTIME_DIR/window-address"   # the service watches this for click-away + the bar indicator
+ADDR_FILE="$RUNTIME_DIR/window-address"   # service watches this (bar indicator)
+GEOM_FILE="$RUNTIME_DIR/window-geometry"  # service watches this (dismiss-scrim input hole)
 mkdir -p "$RUNTIME_DIR" "$(dirname "$PROFILE_DIR")"
 
 # Serialise every invocation. Rapid double-clicks on the widget must not each
@@ -122,6 +123,10 @@ stow_window() {
   dsp "hl.dsp.window.resize({ window = \"$w\", x = $PANEL_W, y = $PANEL_H, exact = true })"
   window_on_special || dsp "hl.dsp.window.move({ window = \"$w\", workspace = \"special:$SPECIAL_WS\", follow = false })"
   dsp "hl.dsp.window.move({ window = \"$w\", x = $x, y = $y, exact = true })"
+
+  # Monitor-local geometry for the dismiss scrim: panel x/y/w/h + bar height, so
+  # the scrim can leave both the panel and the bar clickable.
+  printf '%s %s %s %s %s\n' "$x" "$y" "$PANEL_W" "$PANEL_H" "${top:-32}" >"$GEOM_FILE"
 }
 
 launch() {
@@ -158,13 +163,6 @@ launch() {
 
 show() {
   launch || return 1
-  # A special workspace normally swallows clicks that miss its own windows, so
-  # you cannot click a window behind the panel to dismiss it. special_fallthrough
-  # lets those clicks reach the window below, which is also what fires the
-  # service's click-away. Session-only (Omarchy's Lua config drops the legacy
-  # keyword parser, so this goes through `eval`); `omarchy-tidalweb-setup hypr`
-  # makes it permanent.
-  hyprctl eval 'hl.config({ input = { special_fallthrough = true } })' >/dev/null 2>&1 || true
   special_active || dsp "hl.dsp.workspace.toggle_special(\"$SPECIAL_WS\")"
   return 0
 }
@@ -186,7 +184,7 @@ stop() {
   fi
   # Anything left (renderers that outlived the browser, a wedged instance).
   pkill -f -- "--user-data-dir=$PROFILE_DIR" 2>/dev/null
-  rm -f "$ADDR_FILE"
+  rm -f "$ADDR_FILE" "$GEOM_FILE"
   return 0
 }
 

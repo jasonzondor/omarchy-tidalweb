@@ -2,18 +2,20 @@
   "schemaVersion": 1,
   "id": "com.zondor.tidalweb",
   "name": "TIDAL Web",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "author": "Jason Zondor",
   "license": "MIT",
   "description": "TIDAL in the Omarchy bar with no Mopidy. Clicking the widget drops down the TIDAL web player in an isolated Chromium, parked on its own workspace so it is never in your way; the widget shows what is playing and drives transport over MPRIS. Requires only software Omarchy ships by default.",
   "kinds": [
     "service",
-    "bar-widget"
+    "bar-widget",
+    "overlay"
   ],
   "keepLoaded": true,
   "entryPoints": {
     "service": "qml/Service.qml",
-    "barWidget": "qml/BarWidget.qml"
+    "barWidget": "qml/BarWidget.qml",
+    "overlay": "qml/Scrim.qml"
   },
   "barWidget": {
     "displayName": "TIDAL Web",

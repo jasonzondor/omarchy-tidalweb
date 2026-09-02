@@ -77,20 +77,13 @@ cmd_check() {
 
 cmd_hypr() {
   cat <<'EOF'
-Add to ~/.config/hypr/hyprland.lua, below "Add any other personal Hyprland
-configuration below":
+Optional — the launcher already floats + parks + positions the window. This
+rule just pins it if you move it by hand. Add to ~/.config/hypr/hyprland.lua,
+below "Add any other personal Hyprland configuration below":
 
-  -- Let clicks that miss a special-workspace window reach the window below,
-  -- so clicking away from the TIDAL panel dismisses it. The launcher sets this
-  -- per-session too; this line makes it survive a hyprctl reload.
-  hl.config({ input = { special_fallthrough = true } })
-
-  -- Optional: the launcher already floats + parks the window, but this pins
-  -- the size/place even if you move it by hand.
   o.window("^chrome-listen\\.tidal\\.com", {
     float = true,
     size = "980 700",
-    center = true,
     workspace = "special:tidal silent",
   })
 

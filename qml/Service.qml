@@ -32,7 +32,20 @@ Item {
   // Hot-reload destroys this object while a Process callback or Timer may still
   // fire; every async path bails once this flips.
   property bool alive: true
-  Component.onDestruction: root.alive = false
+
+  // Stop playback when the plugin is *disabled* — but not on a hot reload or a
+  // shell restart, where the window (and its music) should survive. On disable
+  // the registry has already flipped the plugin to not-enabled by the time this
+  // runs; on a reload/restart it is still enabled (or the registry is gone).
+  Component.onDestruction: {
+    root.alive = false
+    var disabled = false
+    try {
+      disabled = pluginRegistry && typeof pluginRegistry.isEnabled === "function"
+        && pluginRegistry.isEnabled(root.pluginId) === false
+    } catch (e) {}
+    if (disabled) root.runLauncher("stop")
+  }
 
   // ---- MPRIS binding -----------------------------------------------------
 
@@ -89,9 +102,6 @@ Item {
   // Our window's Hyprland address (bare hex, no 0x), written by the launcher.
   property string panelAddr: ""
 
-  // Ignore click-away events briefly after we ask for the panel — the launcher
-  // takes a beat to show it, and the bar click itself can shuffle focus.
-  property double clickAwayGuardUntil: 0
 
   FileView {
     id: addrFile
@@ -128,12 +138,13 @@ Item {
       } else if (name === "activespecialv2") {
         root.panelVisible = String(parts[1] || "") === root.specialWs
       } else if (name === "activewindowv2") {
+        // Focus moved to another window — tuck the panel away, the way the
+        // calendar closes when you click elsewhere. Safe during our own open:
+        // Hyprland emits activewindowv2 (for our window) *before* activespecial,
+        // so panelVisible is still false then and this is skipped.
         if (!root.panelVisible) return
-        if (Date.now() < root.clickAwayGuardUntil) return
         var addr = String(event.data || "").trim().replace(/^0x/i, "").toLowerCase()
-        // Focus moved to another window (or to nothing) — tuck the panel away,
-        // the way the calendar closes when you click elsewhere.
-        if (addr !== root.panelAddr) root.hideWeb()
+        if (addr !== "" && addr !== root.panelAddr) root.hideWeb()
       }
     }
   }
@@ -143,16 +154,8 @@ Item {
     Quickshell.execDetached(["bash", "-c", "exec \"$0\" \"$1\"", root.launcher, String(arg)])
   }
 
-  function toggleWeb() {
-    root.clickAwayGuardUntil = Date.now() + 2500
-    root.runLauncher("toggle")
-    return true
-  }
-  function showWeb() {
-    root.clickAwayGuardUntil = Date.now() + 2500
-    root.runLauncher("show")
-    return true
-  }
+  function toggleWeb() { root.runLauncher("toggle"); return true }
+  function showWeb() { root.runLauncher("show"); return true }
   function hideWeb() { root.runLauncher("hide"); return true }
   function quit() { root.runLauncher("stop"); return true }
 

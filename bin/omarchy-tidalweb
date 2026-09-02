@@ -161,9 +161,10 @@ show() {
   # A special workspace normally swallows clicks that miss its own windows, so
   # you cannot click a window behind the panel to dismiss it. special_fallthrough
   # lets those clicks reach the window below, which is also what fires the
-  # service's click-away. Session-only; `omarchy-tidalweb-setup hypr` makes it
-  # permanent.
-  hyprctl keyword input:special_fallthrough true >/dev/null 2>&1 || true
+  # service's click-away. Session-only (Omarchy's Lua config drops the legacy
+  # keyword parser, so this goes through `eval`); `omarchy-tidalweb-setup hypr`
+  # makes it permanent.
+  hyprctl eval 'hl.config({ input = { special_fallthrough = true } })' >/dev/null 2>&1 || true
   special_active || dsp "hl.dsp.workspace.toggle_special(\"$SPECIAL_WS\")"
   return 0
 }

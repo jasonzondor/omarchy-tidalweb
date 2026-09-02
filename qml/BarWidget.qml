@@ -35,12 +35,34 @@ BarWidget {
   readonly property bool showText: showLabel && !vertical && hasTrack && label !== ""
   readonly property bool idleHidden: hideWhenPaused && !hasTrack
 
-  // The plugin has no panel surface of its own — the drop-down is a real
-  // Chromium window. These keep the bar's hotkey plumbing happy.
-  readonly property bool opened: false
+  // ---- panel state ----
+  //
+  // The drop-down is a real Chromium window, not a Quickshell popout, so the
+  // bar's own popout coordinator does not know about it. We register with it
+  // by hand whenever the service says the panel is showing: that both draws the
+  // accent under-line and lets opening any other bar popup close this one.
+  readonly property bool panelOpen: svc ? svc.panelVisible : false
+  readonly property bool opened: panelOpen
+  readonly property real openPanelIndicatorWidth: content.implicitWidth
+
   function open() { if (svc) svc.showWeb() }
   function close() { if (svc) svc.hideWeb() }
+  function closeForPopoutSwitch() { if (svc) svc.hideWeb() }
   function toggle() { if (svc) svc.toggleWeb() }
+
+  function syncPopout() {
+    if (!bar || typeof bar.requestPopout !== "function") return
+    if (panelOpen) bar.requestPopout(root)
+    else if (bar.activePopout === root) bar.releasePopout(root)
+  }
+
+  onPanelOpenChanged: syncPopout()
+  onBarChanged: syncPopout()
+  Component.onCompleted: syncPopout()
+  Component.onDestruction: {
+    if (bar && bar.activePopout === root && typeof bar.releasePopout === "function")
+      bar.releasePopout(root)
+  }
 
   visible: !idleHidden
   implicitWidth: idleHidden ? 0 : (vertical ? barSize : content.implicitWidth + Style.space(14))
@@ -65,7 +87,7 @@ BarWidget {
       anchors.verticalCenter: parent.verticalCenter
       visible: !root.showArt
       textFormat: Text.PlainText
-      text: ""
+      text: ""
       color: root.playing
         ? (root.bar ? root.bar.barForeground : Color.bar.text)
         : Qt.darker(root.bar ? root.bar.barForeground : Color.bar.text, 1.6)

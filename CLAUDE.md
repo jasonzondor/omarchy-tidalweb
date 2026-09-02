@@ -47,6 +47,16 @@ now-playing in the bar and toggles that window in and out of view.
   holds it until the spawned Chromium is pgrep-visible, so a click storm can't
   spawn a pile of windows. Chromium is spawned with `9>&-` so it doesn't
   inherit and pin that lock.
+- **Panel state / click-away**: the launcher writes the window address to
+  `$XDG_RUNTIME_DIR/omarchy-tidalweb/window-address`; `Service.qml` watches it
+  and listens to `Hyprland.rawEvent` — `activespecial`(`v2`) sets
+  `panelVisible`, and `activewindowv2` with an address that isn't ours hides
+  the panel (guarded by `clickAwayGuardUntil` for ~2.5s after we open it).
+  `BarWidget` mirrors `panelVisible` into `bar.requestPopout(root)` /
+  `releasePopout(root)` so the bar draws its accent under-line and closing
+  another bar popup closes this one.
+- **`hyprctl dispatch` is Lua here.** `activespecial`/`activewindowv2` etc.
+  are still emitted on `.socket2.sock` in the classic `name>>a,b,c` form.
 - **MPRIS matching**: `Service.player` prefers the player whose
   `metadata["xesam:url"]` contains `tidal`, so it never latches onto another
   Chromium window. Falls back to "a Chromium player with a track" only if no

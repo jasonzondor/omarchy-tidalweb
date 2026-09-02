@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Services.Mpris
 import "lib/Format.js" as Format
 
@@ -79,13 +80,79 @@ Item {
 
   // ---- the drop-down window -------------------------------------------
 
+  readonly property string specialWs: "special:tidal"
+
+  // True while the TIDAL panel is showing (special:tidal is the active special
+  // workspace). Drives the bar widget's open-panel indicator.
+  property bool panelVisible: false
+
+  // Our window's Hyprland address (bare hex, no 0x), written by the launcher.
+  property string panelAddr: ""
+
+  // Ignore click-away events briefly after we ask for the panel — the launcher
+  // takes a beat to show it, and the bar click itself can shuffle focus.
+  property double clickAwayGuardUntil: 0
+
+  FileView {
+    id: addrFile
+    path: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/omarchy-tidalweb/window-address"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.panelAddr = String(text() || "").trim().replace(/^0x/i, "").toLowerCase()
+    onLoadFailed: root.panelAddr = ""
+  }
+
+  // Hyprland only tells us when the special workspace *changes*; seed the state
+  // once so a shell restart with the panel already open is not wrong until the
+  // next toggle.
+  Process {
+    id: specialProbe
+    running: true
+    command: ["bash", "-c",
+      "hyprctl monitors -j | jq -r 'any(.[]; .specialWorkspace.name == \"" + root.specialWs + "\")'"]
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(line) { if (root.alive) root.panelVisible = (String(line).trim() === "true") }
+    }
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!root.alive || !event) return
+      var name = String(event.name || "")
+      var parts = String(event.data || "").split(",")
+
+      if (name === "activespecial") {
+        root.panelVisible = String(parts[0] || "") === root.specialWs
+      } else if (name === "activespecialv2") {
+        root.panelVisible = String(parts[1] || "") === root.specialWs
+      } else if (name === "activewindowv2") {
+        if (!root.panelVisible) return
+        if (Date.now() < root.clickAwayGuardUntil) return
+        var addr = String(event.data || "").trim().replace(/^0x/i, "").toLowerCase()
+        // Focus moved to another window (or to nothing) — tuck the panel away,
+        // the way the calendar closes when you click elsewhere.
+        if (addr !== root.panelAddr) root.hideWeb()
+      }
+    }
+  }
+
   function runLauncher(arg) {
     if (root.launcher === "") return
     Quickshell.execDetached(["bash", "-c", "exec \"$0\" \"$1\"", root.launcher, String(arg)])
   }
 
-  function toggleWeb() { root.runLauncher("toggle"); return true }
-  function showWeb() { root.runLauncher("show"); return true }
+  function toggleWeb() {
+    root.clickAwayGuardUntil = Date.now() + 2500
+    root.runLauncher("toggle")
+    return true
+  }
+  function showWeb() {
+    root.clickAwayGuardUntil = Date.now() + 2500
+    root.runLauncher("show")
+    return true
+  }
   function hideWeb() { root.runLauncher("hide"); return true }
   function quit() { root.runLauncher("stop"); return true }
 
@@ -134,7 +201,8 @@ Item {
       title: root.title,
       artist: root.artist,
       album: root.album,
-      artUrl: root.artUrl
+      artUrl: root.artUrl,
+      panelVisible: root.panelVisible
     })
   }
 

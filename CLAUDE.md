@@ -48,16 +48,15 @@ now-playing in the bar and toggles that window in and out of view.
   spawn a pile of windows. Chromium is spawned with `9>&-` so it doesn't
   inherit and pin that lock.
 - **Panel state**: `Service.qml` sets `panelVisible` from `Hyprland.rawEvent`
-  `activespecial`(`v2`). `BarWidget` mirrors it into `bar.requestPopout(root)` /
-  `releasePopout(root)` for the accent under-line + one-popup-at-a-time.
-- **Click-away** is `qml/Scrim.qml` (an `overlay` kind, keepLoaded): a
-  transparent full-screen layer-shell `PanelWindow` on `WlrLayer.Overlay` whose
-  input `mask` is the screen minus the panel rect minus the bar strip. A press
-  anywhere in that region calls `hideWeb`. Focus events are *not* used for
-  click-away — they fire on hover with focus-follows-mouse. The launcher writes
-  `window-geometry` (`x y w h barHeight`, monitor-local) for the mask.
-- **`hyprctl dispatch` is Lua here.** `activespecial`/`activewindowv2` etc.
-  are still emitted on `.socket2.sock` in the classic `name>>a,b,c` form.
+  `activespecial`(`v2`) (still emitted on `.socket2.sock` as `name>>a,b,c`).
+  `BarWidget` mirrors it into `bar.requestPopout(root)` / `releasePopout(root)`
+  for the accent under-line + one-popup-at-a-time close.
+- **No click-away.** The panel is a real window on a special workspace, which
+  swallows outside clicks; a transparent input-masked scrim on `WlrLayer.Overlay`
+  was tried (`qml/Scrim.qml`, since removed) and did not reliably catch clicks.
+  Dismiss is: click the widget, or switch workspace (Omarchy has
+  `hide_special_on_workspace_change`). A working version would likely need
+  `HyprlandFocusGrab` with the Chromium toplevel from `ToplevelManager`.
 - **MPRIS matching**: `Service.player` prefers the player whose
   `metadata["xesam:url"]` contains `tidal`, so it never latches onto another
   Chromium window. Falls back to "a Chromium player with a track" only if no

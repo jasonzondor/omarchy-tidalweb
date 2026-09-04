@@ -23,10 +23,45 @@ PANEL_W=980
 PANEL_H=700
 TOP_GAP=8     # px below the bar, so it reads as a drop-down from the top
 
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/omarchy-tidalweb"
+# XDG_RUNTIME_DIR is systemd's owner-only (0700) per-user tmpfs. We refuse to
+# fall back to shared /tmp: another local user can pre-plant a directory (or a
+# symlink named "lock" inside it) there ahead of us, and exec 9>"$LOCK_FILE"
+# would happily follow and truncate it. Failing closed here means the only
+# place we ever create RUNTIME_DIR is a parent no other user can write into,
+# which is what actually keeps the lock file safe from that race.
+if [[ -z "${XDG_RUNTIME_DIR:-}" || -L "$XDG_RUNTIME_DIR" || ! -d "$XDG_RUNTIME_DIR" ]]; then
+  echo "omarchy-tidalweb: XDG_RUNTIME_DIR is not set to a real directory; refusing to use shared /tmp" >&2
+  exit 1
+fi
+# The security property we actually need is "no other user can create/replace
+# entries here", which only needs the group/other write bits clear — not
+# exactly mode 700. (systemd's own XDG_RUNTIME_DIR is 700; this also accepts
+# e.g. 755, which is equally safe since write is what lets someone plant a
+# symlink.)
+runtime_owner="$(stat -c '%u' "$XDG_RUNTIME_DIR" 2>/dev/null)" || runtime_owner=
+runtime_mode="$(stat -c '%a' "$XDG_RUNTIME_DIR" 2>/dev/null)" || runtime_mode=
+if [[ "$runtime_owner" != "$(id -u)" || -z "$runtime_mode" || $(( 0$runtime_mode & 0022 )) -ne 0 ]]; then
+  echo "omarchy-tidalweb: XDG_RUNTIME_DIR ($XDG_RUNTIME_DIR) is not owner-only; refusing to use it" >&2
+  exit 1
+fi
+
+RUNTIME_DIR="$XDG_RUNTIME_DIR/omarchy-tidalweb"
 PROFILE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/omarchy-tidalweb/chromium"
 LOCK_FILE="$RUNTIME_DIR/lock"
-mkdir -p "$RUNTIME_DIR" "$(dirname "$PROFILE_DIR")"
+
+if [[ -e "$RUNTIME_DIR" || -L "$RUNTIME_DIR" ]]; then
+  [[ -L "$RUNTIME_DIR" ]] && { echo "omarchy-tidalweb: $RUNTIME_DIR is a symlink; refusing to use it" >&2; exit 1; }
+  [[ -d "$RUNTIME_DIR" ]] || { echo "omarchy-tidalweb: $RUNTIME_DIR is not a directory; refusing to use it" >&2; exit 1; }
+  dir_owner="$(stat -c '%u' "$RUNTIME_DIR" 2>/dev/null)" || dir_owner=
+  dir_mode="$(stat -c '%a' "$RUNTIME_DIR" 2>/dev/null)" || dir_mode=
+  if [[ "$dir_owner" != "$(id -u)" || -z "$dir_mode" || $(( 0$dir_mode & 0022 )) -ne 0 ]]; then
+    echo "omarchy-tidalweb: $RUNTIME_DIR is not owner-only; refusing to use it" >&2
+    exit 1
+  fi
+else
+  mkdir -m 700 "$RUNTIME_DIR"
+fi
+mkdir -p "$(dirname "$PROFILE_DIR")"
 
 # Serialise every invocation. Rapid double-clicks on the widget must not each
 # spawn a Chromium before the first is visible to pgrep — that was how a stray

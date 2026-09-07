@@ -120,6 +120,16 @@ special_active() {
     jq -e --arg w "special:$SPECIAL_WS" 'any(.[]; .specialWorkspace.name == $w)' >/dev/null 2>&1
 }
 
+# Is the panel showing on the *focused* monitor? With more than one monitor the
+# special workspace can be up on another screen; `show`/`toggle` key off this so
+# a click on this monitor's bar pulls the panel here (Hyprland's
+# togglespecialworkspace migrates it to the active monitor) instead of deciding
+# it is already open somewhere the user isn't looking.
+special_on_focused() {
+  hyprctl monitors -j 2>/dev/null |
+    jq -e --arg w "special:$SPECIAL_WS" 'any(.[]; .focused and .specialWorkspace.name == $w)' >/dev/null 2>&1
+}
+
 window_on_special() {
   local addr; addr="$(window_address)"
   [[ -n "$addr" ]] || return 1
@@ -144,12 +154,18 @@ stow_window() {
   # Drop down from the top of the focused monitor, roughly under the centre of
   # the bar — the calendar's neighbourhood. Idempotent: re-running is a no-op
   # once the window is already there.
-  local mon_w scale top x y
-  read -r mon_w scale top < <(hyprctl monitors -j 2>/dev/null |
-    jq -r 'first(.[] | select(.focused)) // .[0] | "\(.width // 1920) \(.scale // 1) \(.reserved[1] // 32)"') || true
-  x="$(awk -v w="${mon_w:-1920}" -v s="${scale:-1}" -v p="$PANEL_W" \
-    'BEGIN{v=(w/s - p)/2; if (v<8) v=8; printf "%d", v}')"
-  y=$(( ${top:-32} + TOP_GAP ))
+  #
+  # `hl.dsp.window.move ... exact` takes global layout coordinates, so the
+  # focused monitor's own layout origin (mon_x/mon_y) has to be added in — it is
+  # only (0,0) on a single-monitor setup or the left-most screen. Without it the
+  # panel lands on whatever monitor covers those bare coordinates while
+  # special:tidal is toggled onto the focused one, and nothing shows.
+  local mon_x mon_y mon_w scale top x y
+  read -r mon_x mon_y mon_w scale top < <(hyprctl monitors -j 2>/dev/null |
+    jq -r 'first(.[] | select(.focused)) // .[0] | "\(.x // 0) \(.y // 0) \(.width // 1920) \(.scale // 1) \(.reserved[1] // 32)"') || true
+  x="$(awk -v mx="${mon_x:-0}" -v w="${mon_w:-1920}" -v s="${scale:-1}" -v p="$PANEL_W" \
+    'BEGIN{v=mx+(w/s - p)/2; if (v<mx+8) v=mx+8; printf "%d", v}')"
+  y=$(( ${mon_y:-0} + ${top:-32} + TOP_GAP ))
 
   dsp "hl.dsp.window.float({ window = \"$w\", action = \"on\" })"
   dsp "hl.dsp.window.resize({ window = \"$w\", x = $PANEL_W, y = $PANEL_H, exact = true })"
@@ -191,7 +207,7 @@ launch() {
 
 show() {
   launch || return 1
-  special_active || dsp "hl.dsp.workspace.toggle_special(\"$SPECIAL_WS\")"
+  special_on_focused || dsp "hl.dsp.workspace.toggle_special(\"$SPECIAL_WS\")"
   return 0
 }
 
@@ -201,7 +217,7 @@ hide() {
 }
 
 toggle() {
-  if is_running && special_active; then hide; else show; fi
+  if is_running && special_on_focused; then hide; else show; fi
 }
 
 stop() {

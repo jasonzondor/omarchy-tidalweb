@@ -40,6 +40,18 @@ now-playing in the bar and toggles that window in and out of view.
   follow = false })'`. Ops by `window = "address:.."` don't steal focus.
   `hl.dsp.workspace.toggle_special("tidal")` shows/hides the special ws.
   `hyprctl clients -j` / `monitors -j` queries still work normally.
+- **Multi-monitor: `hl.dsp.window.move({ x, y, exact = true })` is in global
+  layout coords, not monitor-local.** `stow_window` must add the focused
+  monitor's `.x`/`.y` (from `hyprctl monitors -j`) to the computed drop-down
+  position — otherwise on any monitor that isn't the left-most the panel is
+  parked inside a *different* monitor's rectangle while `special:tidal` toggles
+  onto the focused one, and the popup "never shows". `show`/`toggle` also key
+  off `special_on_focused` (special ws up on *this* monitor), not
+  `special_active` (up anywhere), so a bar click pulls the panel to the current
+  screen. NB: hammering `toggle_special`/cross-monitor `window.move` for one
+  special-ws name (what the old bug caused via repeated clicks) can wedge that
+  name's special workspace until the next Hyprland restart — `hyprctl reload`
+  does not clear it.
 - **Chromium ignores `--class` in `--app` mode on Wayland** — the window comes
   up as `chrome-listen.tidal.com__-Default` (derived from the `--app` URL, fixed
   for the window's life). Match by pid first, that class regex as fallback.

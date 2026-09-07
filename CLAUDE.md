@@ -63,6 +63,14 @@ now-playing in the bar and toggles that window in and out of view.
   `activespecial`(`v2`) (still emitted on `.socket2.sock` as `name>>a,b,c`).
   `BarWidget` mirrors it into `bar.requestPopout(root)` / `releasePopout(root)`
   for the accent under-line + one-popup-at-a-time close.
+- **`bar.activePopout` is one shared slot, but there is a `BarWidget` instance
+  per monitor bar.** On a multi-monitor setup every instance runs `syncPopout()`
+  when `panelVisible` flips true; if more than one calls `bar.requestPopout()`,
+  the bar evicts the earlier owner and that eviction calls its
+  `closeForPopoutSwitch()` → `hideWeb()`, so the panel closes the instant it
+  opens (looked exactly like "popup never shows on 2+ monitors"). Guard:
+  `syncPopout()` registers only when no sibling instance (same `moduleName`)
+  already holds `activePopout` (`siblingHoldsPopout()`).
 - **No click-away.** The panel is a real window on a special workspace, which
   swallows outside clicks; a transparent input-masked scrim on `WlrLayer.Overlay`
   was tried (`qml/Scrim.qml`, since removed) and did not reliably catch clicks.

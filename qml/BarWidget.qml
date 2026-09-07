@@ -50,10 +50,26 @@ BarWidget {
   function closeForPopoutSwitch() { if (svc) svc.hideWeb() }
   function toggle() { if (svc) svc.toggleWeb() }
 
+  // One Service, one shared bar popout slot — but a widget instance per monitor
+  // bar, and every instance runs syncPopout() when the panel opens. If the
+  // second instance also calls requestPopout(), the bar evicts the first and
+  // the eviction fires the first instance's closeForPopoutSwitch() -> hideWeb(),
+  // slamming shut the panel that was just opened. So an instance registers only
+  // when no sibling (same moduleName, other monitor) already holds the slot.
+  // Single-monitor: one instance, no sibling, no fight — which is why this only
+  // ever broke with 2+ monitors.
+  function siblingHoldsPopout() {
+    return !!(bar && bar.activePopout && bar.activePopout !== root
+      && bar.activePopout.moduleName === moduleName)
+  }
+
   function syncPopout() {
     if (!bar || typeof bar.requestPopout !== "function") return
-    if (panelOpen) bar.requestPopout(root)
-    else if (bar.activePopout === root) bar.releasePopout(root)
+    if (panelOpen) {
+      if (bar.activePopout !== root && !siblingHoldsPopout()) bar.requestPopout(root)
+    } else if (bar.activePopout === root) {
+      bar.releasePopout(root)
+    }
   }
 
   onPanelOpenChanged: syncPopout()

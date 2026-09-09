@@ -28,9 +28,17 @@ now-playing in the bar and toggles that window in and out of view.
 - **Hot-reload safety**: saving any file reloads the plugin and destroys
   `Service`. `alive` is set false in `Component.onDestruction`; guard async
   paths with it.
-- **`manifest` (and so `pluginDir` / `launcher`) is injected AFTER
-  `Component.onCompleted`.** Anything needing the plugin path must tolerate an
-  empty value at construction.
+- **`manifest` is injected AFTER `Component.onCompleted`**, and (since an
+  Omarchy hardening pass, ~4.0.3) no longer carries `__sourceDir` at all for a
+  third-party plugin — `shell.qml`'s `publicPluginManifest()` strips it (with
+  `__isFirstParty`/`__hostCapabilities`) before handing the manifest to
+  anything but a first-party plugin. `Service.qml`'s `pluginDir` therefore
+  resolves its own directory via `Qt.resolvedUrl("..")` instead (a relative
+  URL in a QML document resolves against that document's own location —
+  `Service.qml` lives in `qml/`, so `".."` is the plugin root), falling back to
+  `manifest.__sourceDir` only if some future/older shell still sets it.
+  Anything needing the plugin path must still tolerate an empty value at
+  construction (before the binding first evaluates).
 - **Child processes** go through `bash -c` (`["bash","-c","exec \"$0\" \"$1\"",
   script, arg]`) — Quickshell's `Process` / `execDetached` won't reliably start
   a script by path directly, especially through a symlinked dir.

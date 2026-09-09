@@ -26,7 +26,19 @@ Item {
   property var pluginRegistry: null
 
   readonly property string pluginId: "com.zondor.tidalweb"
-  readonly property string pluginDir: manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
+  // The shell used to inject the plugin's real filesystem path via
+  // manifest.__sourceDir, but a hardening pass now strips that (and
+  // __isFirstParty/__hostCapabilities) from the manifest a third-party plugin
+  // gets — publicPluginManifest() in shell.qml. Fall back to resolving our
+  // own directory the QML-native way: a relative URL in a document resolves
+  // against that document's own location, so ".." from this file (which
+  // lives in qml/) is the plugin root, no manifest cooperation required.
+  readonly property string pluginDir: {
+    if (manifest && manifest.__sourceDir) return String(manifest.__sourceDir)
+    var resolved = String(Qt.resolvedUrl(".."))
+    if (resolved.indexOf("file://") !== 0) return ""
+    return decodeURIComponent(resolved.substring("file://".length)).replace(/\/+$/, "")
+  }
   readonly property string launcher: pluginDir === "" ? "" : pluginDir + "/bin/omarchy-tidalweb"
 
   // Hot-reload destroys this object while a Process callback or Timer may still

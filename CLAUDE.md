@@ -71,6 +71,21 @@ now-playing in the bar and toggles that window in and out of view.
   opens (looked exactly like "popup never shows on 2+ monitors"). Guard:
   `syncPopout()` registers only when no sibling instance (same `moduleName`)
   already holds `activePopout` (`siblingHoldsPopout()`).
+- **Bar click routing (broke in an Omarchy update, ~4.0.3): a plain `MouseArea`
+  on the widget no longer receives left-clicks.** `plugins/bar/Bar.qml`'s
+  `ModuleSlot` now has its own `modulePointer` `MouseArea` (left-button only,
+  `anchors.fill: parent`) on top of every module, added to support
+  drag-to-reorder. On a plain click it calls `pressModuleClickTarget`, which
+  hit-tests `bar.clickTargets` (or falls back to `slot.activeItem`, i.e. this
+  widget's root) and requires `typeof target.triggerPress === "function"` —
+  the same contract `Ui/WidgetButton.qml` implements — else the click is
+  silently dropped. Fix: implement `triggerPress(button)` on `root` and
+  register/unregister via `bar.registerClickTarget(root)` /
+  `unregisterClickTarget(root)` in `Component.onCompleted` / `onBarChanged` /
+  `Component.onDestruction` (mirrors `WidgetButton.syncClickRegistration()`).
+  Right-click, middle-click and wheel aren't claimed by `modulePointer`
+  (`acceptedButtons: Qt.LeftButton` only) so they still reach the widget's own
+  `MouseArea` untouched — only the primary left-click toggle broke.
 - **No click-away.** The panel is a real window on a special workspace, which
   swallows outside clicks; a transparent input-masked scrim on `WlrLayer.Overlay`
   was tried (`qml/Scrim.qml`, since removed) and did not reliably catch clicks.

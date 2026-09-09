@@ -72,12 +72,36 @@ BarWidget {
     }
   }
 
+  // The bar's own drag-to-reorder MouseArea sits on top of every module and
+  // claims the left button (to tell a click from a drag), so a plain MouseArea
+  // on the widget never sees a left-click any more. The bar instead looks up a
+  // registered click target under the cursor and calls `triggerPress` on it —
+  // the same contract Ui/WidgetButton.qml implements — so this widget has to
+  // register itself and implement `triggerPress` to get its left-click back.
+  // Right-click/middle-click/wheel aren't claimed by that MouseArea and still
+  // reach the MouseArea below untouched.
+  property var registeredBar: null
+
+  function triggerPress(button) {
+    if (bar) bar.hideTooltip(root)
+    if (!svc) return
+    if (button === Qt.MiddleButton) svc.playPause()
+    else svc.toggleWeb()
+  }
+
+  function syncClickRegistration() {
+    if (registeredBar && registeredBar.unregisterClickTarget) registeredBar.unregisterClickTarget(root)
+    registeredBar = bar
+    if (registeredBar && registeredBar.registerClickTarget) registeredBar.registerClickTarget(root)
+  }
+
   onPanelOpenChanged: syncPopout()
-  onBarChanged: syncPopout()
-  Component.onCompleted: syncPopout()
+  onBarChanged: { syncPopout(); syncClickRegistration() }
+  Component.onCompleted: { syncPopout(); syncClickRegistration() }
   Component.onDestruction: {
     if (bar && bar.activePopout === root && typeof bar.releasePopout === "function")
       bar.releasePopout(root)
+    if (registeredBar && registeredBar.unregisterClickTarget) registeredBar.unregisterClickTarget(root)
   }
 
   readonly property color fg: bar ? bar.barForeground : Color.bar.text

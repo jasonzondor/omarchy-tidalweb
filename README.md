@@ -2,6 +2,13 @@
 
 # TIDAL Web for Omarchy
 
+> **Archived.** This repo is no longer maintained and has been delisted from
+> the [Omarchy Plugin Marketplace](https://omarchyplugins.com/). Omarchy's
+> built-in `omarchy.media` plugin now covers TIDAL playback control out of the
+> box, so I've switched to that instead of maintaining a separate third-party
+> plugin. The code below is left as-is for reference; installation is no
+> longer recommended.
+
 TIDAL in the Omarchy bar **without Mopidy** — or anything else Omarchy doesn't
 already ship. Click the bar widget and the TIDAL web player drops down from its
 own workspace; the widget shows what's playing and the media keys work. That's
